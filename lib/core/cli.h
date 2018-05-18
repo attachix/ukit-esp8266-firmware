@@ -22,7 +22,7 @@
 
 #include <user_config.h>
 #include <SmingCore.h>
-#include "../SmingCore/DataSourceStream.h"
+#include "Data/Stream/DataSourceStream.h"
 
 typedef Delegate<void(char command, char* params)> consoleFuncDelegate;
 
