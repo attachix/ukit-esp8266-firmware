@@ -18,24 +18,30 @@
 // along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+/*
+ * info.h
+ *
+ *  Created on: Jul 28, 2016
+ *      Author: slavey
+ */
 #include "info.h"
+#include <esp_spi_flash.h>
 
-#include <spi_flash.h>
-
-ManufacturerData* getManufacturerData() {
+ManufacturerData* getManufacturerData()
+{
 	int size = sizeof(ManufacturerData);
-	if (size % 4) { // align the size to 4 byte boundary
+	if(size % 4) { // align the size to 4 byte boundary
 		size = ((size / 4) + 1) * 4;
 	}
-	uint8_t *buffer = new uint8_t[size];
-	if (!buffer) {
+	uint8_t* buffer = new uint8_t[size];
+	if(!buffer) {
 		debugf("Unable to allocate memory for ManufacturerData buffer");
 		return NULL;
 	}
 
-	int error = spi_flash_read(MANUFACTURER_DATA_ADDR, (uint32*) ((void*) buffer), size);
-	if(error) {
-		debugf("Unable to read ManufacturerData. Got error: %d", error);
+	int read = flashmem_read(buffer, MANUFACTURER_DATA_ADDR, size);
+	if(read != size) {
+		debugf("Unable to read ManufacturerData. Read only %d bytes.", read);
 		delete[] buffer;
 
 		return NULL;
@@ -44,66 +50,58 @@ ManufacturerData* getManufacturerData() {
 	return (ManufacturerData*)buffer;
 }
 
-DeviceData* getDeviceData() {
-	uint8_t *buffer = new uint8_t[100];
-	if (!buffer) {
-		debugf("Unable to allocate memory for ManufacturerData buffer");
-		return NULL;
-	}
+DeviceData* getDeviceData()
+{
+	uint8_t buffer[100];
 
-	int error = spi_flash_read(DEVICE_DATA_ADDR, (uint32*) ((void*) buffer), 100);
-	if (error) {
-		debugf("Unable to read DeviceData. Got error: %d", error);
+	int read = flashmem_read(buffer, DEVICE_DATA_ADDR, 100);
+	if(read != 100) {
+		debugf("Unable to read DeviceData. Got error: %d", read);
 		delete[] buffer;
 
 		return NULL;
 	}
 
-	DeviceData* data = (DeviceData *) malloc(sizeof(DeviceData));
-	if (!data) {
+	DeviceData* data = (DeviceData*)malloc(sizeof(DeviceData));
+	if(!data) {
 		return NULL;
 	}
 
 	int algo = (int)buffer[0]; // max 256
 	int size = (int)buffer[1]; // max 256
 
-//	debugf("Size: %d", size);
+	//	debugf("Size: %d", size);
 
 	// TODO: implement different password decryption schemes
-	memcpy(data->password, buffer+2, size+1);
-	data->password[size+1] = 0;
+	size_t bytesLength = std::min(sizeof(data->password), (unsigned int)size) - 1;
+	memcpy(data->password, buffer + 2, bytesLength);
+	data->password[bytesLength] = 0;
 
-//	debugf("Password: %s", data->password);
-
-	delete[] buffer;
+	//	debugf("Password: %s", data->password);
 
 	return data;
 }
 
 #ifdef ENABLE_SSL
 
-SSLKeyCertPair getDeviceClientCert() {
-	#include "ssl/private_key.h"
-	#include "ssl/cert.h"
+SslKeyCertPair getDeviceClientCert()
+{
+#include "ssl/private_key.h"
+#include "ssl/cert.h"
 
 	// TODO: Get the certificate data from Flash
-	SSLKeyCertPair clientCertKey;
-	clientCertKey.certificate = new uint8_t[default_certificate_len];
-	memcpy(clientCertKey.certificate, default_certificate, default_certificate_len);
-	clientCertKey.certificateLength = default_certificate_len;
-	clientCertKey.key = new uint8_t[default_private_key_len];
-	memcpy(clientCertKey.key, default_private_key, default_private_key_len);
-	clientCertKey.keyLength = default_private_key_len;
-	clientCertKey.keyPassword = NULL;
+	SslKeyCertPair clientCertKey;
+	clientCertKey.assign(default_private_key, default_private_key_len, default_certificate, default_certificate_len);
 
 	return clientCertKey;
 }
 
 #endif /* ENABLE_SSL */
 
-char* loadPsk(int *keylen) {
+char* loadPsk(int* keylen)
+{
 	SHA1_CTX sha_ctx;
-	uint8_t *digest = (uint8_t *)malloc(SHA1_SIZE);
+	uint8_t* digest = (uint8_t*)malloc(SHA1_SIZE);
 	if(!digest) {
 		*keylen = 0;
 		return NULL;
@@ -118,19 +116,14 @@ char* loadPsk(int *keylen) {
 		return NULL;
 	}
 
-	char *buffer =(char *)malloc(100);
-	sprintf(buffer, "%x%04x%04x%x%s%s",  system_get_chip_id(),
-									 manufacturerData->id,
-									 manufacturerData->factory,
-									 spi_flash_get_id(),
-									 deviceData->password,
-									 manufacturerData->serial
-							  	  );
+	char* buffer = (char*)malloc(100);
+	sprintf(buffer, "%x%04x%04x%x%s%s", system_get_chip_id(), manufacturerData->id, manufacturerData->factory,
+			spi_flash_get_id(), deviceData->password, manufacturerData->serial);
 
-//	debugf("Buffer: %s, size: %d", buffer, strlen(buffer));
+	//	debugf("Buffer: %s, size: %d", buffer, strlen(buffer));
 
 	SHA1_Init(&sha_ctx);
-	SHA1_Update(&sha_ctx, (uint8_t *)buffer, strlen(buffer));
+	SHA1_Update(&sha_ctx, (uint8_t*)buffer, strlen(buffer));
 	SHA1_Final(digest, &sha_ctx);
 
 	free(buffer);
@@ -138,16 +131,16 @@ char* loadPsk(int *keylen) {
 	delete[] manufacturerData;
 	free(deviceData);
 
-	char *hexdigest = (char *)malloc(2*SHA1_SIZE+1);
-	if (!hexdigest) {
+	char* hexdigest = (char*)malloc(2 * SHA1_SIZE + 1);
+	if(!hexdigest) {
 		free(digest);
 
 		*keylen = 0;
 		return NULL;
 	}
 
-	char *c = hexdigest;
-	for (int i = 0; i < SHA1_SIZE; i++) {
+	char* c = hexdigest;
+	for(int i = 0; i < SHA1_SIZE; i++) {
 		sprintf(c, "%02x", digest[i]);
 		c += 2;
 	}
@@ -162,8 +155,9 @@ char* loadPsk(int *keylen) {
  * Get device's Unique Id
  * @return String - The Unique Id of the Device
  */
-String getDevUID() {
-	char c[15];
+String getDevUID()
+{
+	char c[17];
 	sprintf(c, "%x%x", system_get_chip_id(), spi_flash_get_id());
 	return String(c);
 }

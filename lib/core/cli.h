@@ -17,12 +17,17 @@
  * along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MCU2_INCLUDE_CLI_H_
-#define MCU2_INCLUDE_CLI_H_
+/*
+ * cli.h
+ *
+ *  Created on: Feb 11, 2016
+ *      Author: slavey
+ */
 
-#include <user_config.h>
+#pragma once
+
 #include <SmingCore.h>
-#include "Data/Stream/DataSourceStream.h"
+#include <Data/Stream/MemoryDataStream.h>
 
 typedef Delegate<void(char command, char* params)> consoleFuncDelegate;
 
@@ -44,20 +49,19 @@ typedef struct {
 /**
  * Class that contains the console line processing code
  */
-class Cli {
+class Cli
+{
 public:
 	void init();
-	bool addCommand(char code, int size, consoleFuncDelegate func, uint8_t type=CLI_CMD_SIMPLE);
-	void setFlag(uint8_t flag); // used to enable types of commands
+	bool addCommand(char code, int size, consoleFuncDelegate func, uint8_t type = CLI_CMD_SIMPLE);
+	void setFlag(uint8_t flag);   // used to enable types of commands
 	void unsetFlag(uint8_t flag); // used to disable types of commands
 	bool removeCommand(char code);
 	void commandProcessor(Stream& stream, char arrivedChar, unsigned short availableCharsCount);
 
 private:
-	HashMap<char, CommandDefinition> *consoleCommands = nullptr;
+	HashMap<char, CommandDefinition>* consoleCommands = nullptr;
 	char currentCommand = 0;
 	uint8_t flag = CLI_CMD_SIMPLE;
 	HashMap<uint8_t, MemoryDataStream> pendingCommands;
 };
-
-#endif /* MCU2_INCLUDE_CLI_H_ */

@@ -18,20 +18,27 @@
 // along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+/*
+ * crash.cpp
+ *
+ *  Created on: Jul 28, 2016
+ *      Author: slavey
+ */
 #include "crash.h"
+#include <esp_spi_flash.h>
 
 bool loadCrashData(CrashDataType* data)
 {
 	uint8_t buffer[sizeof(CrashDataType)];
 
-	int error = spi_flash_read(CRASH_DATA_ADDR, (uint32*) ((void*) buffer), sizeof(CrashDataType));
-	if (error) {
-		debugf("Unable to read crash data. Got error: %d", error);
+	int read = flashmem_read(buffer, CRASH_DATA_ADDR, sizeof(CrashDataType));
+	if(read != sizeof(CrashDataType)) {
+		debugf("Unable to read application data. Read only %d bytes", read);
 
 		return false;
 	}
 
-	const CrashDataType *tempData = (CrashDataType *)buffer;
+	const CrashDataType* tempData = (CrashDataType*)buffer;
 	if(tempData->magic != CRASH_DATA_MAGIC) {
 		debugf("CrashData: Invalid magic!");
 
@@ -45,12 +52,10 @@ bool loadCrashData(CrashDataType* data)
 
 bool saveCrashData(CrashDataType* data)
 {
-	uint8_t *addr = (uint8 *)data;
-
-	spi_flash_erase_sector(CRASH_DATA_ADDR / SPI_FLASH_SEC_SIZE);
-	int error = spi_flash_write(CRASH_DATA_ADDR, (uint32*)((void*)addr), sizeof(CrashDataType));
-	if(error) {
-		debugf("Unable to write crash data. Got error: %d", error);
+	flashmem_erase_sector(flashmem_get_sector_of_address(CRASH_DATA_ADDR));
+	int written = flashmem_write(data, CRASH_DATA_ADDR, sizeof(CrashDataType));
+	if(written != sizeof(CrashDataType)) {
+		debugf("Unable to write crash data. Wrote only %d bytes.", written);
 
 		return false;
 	}
@@ -58,12 +63,11 @@ bool saveCrashData(CrashDataType* data)
 	return true;
 }
 
-void custom_crash_callback( struct rst_info * rst_info, uint32_t start, uint32_t end )
+void custom_crash_callback(struct rst_info* rst_info, uint32_t start, uint32_t end)
 {
 	CrashDataType data;
 	uint8_t slot = 0;
 	uint32_t pos = 0;
-	uint32_t* values;
 	uint8_t index = 0;
 
 	rboot_rtc_data rtc;
@@ -79,20 +83,20 @@ void custom_crash_callback( struct rst_info * rst_info, uint32_t start, uint32_t
 	data.rom[slot].reason = (*rst_info);
 	data.rom[slot].ms = millis();
 
-	for (pos = start; pos < end; pos += 0x10) {
-	     uint32_t* values = (uint32_t*)(pos);
+	for(pos = start; pos < end; pos += 0x10) {
+		uint32_t* values = (uint32_t*)(pos);
 
-	     // rough indicator: stack frames usually have SP saved as the second word
-	     // bool looksLikeStackFrame = (values[2] == pos + 0x10);
-	     data.rom[slot].sf[index++] = pos;
-	     data.rom[slot].sf[index++] = values[0];
-	     data.rom[slot].sf[index++] = values[1];
-	     data.rom[slot].sf[index++] = values[2];
-	     data.rom[slot].sf[index++] = values[3];
+		// rough indicator: stack frames usually have SP saved as the second word
+		// bool looksLikeStackFrame = (values[2] == pos + 0x10);
+		data.rom[slot].sf[index++] = pos;
+		data.rom[slot].sf[index++] = values[0];
+		data.rom[slot].sf[index++] = values[1];
+		data.rom[slot].sf[index++] = values[2];
+		data.rom[slot].sf[index++] = values[3];
 
-	     if(index == (CRASH_MAX_STACK_FRAME_LINES * 5)) {
-	    	 break;
-	     }
+		if(index == (CRASH_MAX_STACK_FRAME_LINES * 5)) {
+			break;
+		}
 	}
 
 	saveCrashData(&data);

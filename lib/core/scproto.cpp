@@ -20,30 +20,29 @@
 
 #include "scproto.h"
 
-int32_t ScProto::hashCode(uint8_t *data, int length)
+int32_t ScProto::hashCode(uint8_t* data, int length)
 {
 	int32_t hash = 0;
-    if (length == 0) {
-    	return hash;
-    }
+	if(length == 0) {
+		return hash;
+	}
 
-    for (int i = 0; i < length; i++) {
-      hash = ((hash << 5)-hash) + data[i];
-    }
-    return hash;
+	for(int i = 0; i < length; i++) {
+		hash = ((hash << 5) - hash) + data[i];
+	}
+	return hash;
 }
 
-bool ScProto::compareChecksum(int32_t n, uint8_t *bytes) {
-	return  (bytes[0] == ((n >> 24) & 0xFF)) &&
-			(bytes[1] == ((n >> 16) & 0xFF)) &&
-			(bytes[2] == ((n >> 8) & 0xFF)) &&
-			(bytes[3] == (n & 0xFF));
+bool ScProto::compareChecksum(int32_t n, uint8_t* bytes)
+{
+	return (bytes[0] == ((n >> 24) & 0xFF)) && (bytes[1] == ((n >> 16) & 0xFF)) && (bytes[2] == ((n >> 8) & 0xFF)) &&
+		   (bytes[3] == (n & 0xFF));
 }
 
-void ScProto::parse(ScCommands& commands, const char *in, uint8_t *key /*= NULL */, int keylen /*=0 */)
+void ScProto::parse(ScCommands& commands, const char* in, uint8_t* key /*= NULL */, int keylen /*=0 */)
 {
 	int inLength = strlen(in);
-	uint8_t *out = (uint8_t *)malloc(sizeof(uint8_t) * inLength);
+	uint8_t* out = (uint8_t*)malloc(sizeof(uint8_t) * inLength);
 	int outlen = inLength;
 
 	/**
@@ -60,7 +59,7 @@ void ScProto::parse(ScCommands& commands, const char *in, uint8_t *key /*= NULL 
 
 	// 1. Base 64 Decode
 	int result = base64_decode(in, inLength, out, &outlen);
-	if(out[0]!=0 && keylen==0) {
+	if(out[0] != 0 && keylen == 0) {
 		free(out);
 		debugf("No key specified.");
 		return;
@@ -68,12 +67,12 @@ void ScProto::parse(ScCommands& commands, const char *in, uint8_t *key /*= NULL 
 
 	// 2. Checking Checksum
 	uint8_t bytes[4] = {0};
-	for(int i=0; i<4; i++) {
-		bytes[i]= out[i+1];
+	for(int i = 0; i < 4; i++) {
+		bytes[i] = out[i + 1];
 	}
 
 	int offset = 5;
-	int32_t crc = hashCode(out+offset, outlen-offset);
+	int32_t crc = hashCode(out + offset, outlen - offset);
 	bool success = compareChecksum(crc, bytes);
 	if(!success) {
 		free(out);
@@ -82,19 +81,19 @@ void ScProto::parse(ScCommands& commands, const char *in, uint8_t *key /*= NULL 
 	}
 
 	// 3. Getting Clear Text Data
-	int clearDataLength = outlen-offset;
-	uint8_t *clearData = (uint8_t *)malloc(sizeof(uint8_t) * clearDataLength);
+	int clearDataLength = outlen - offset;
+	uint8_t* clearData = (uint8_t*)malloc(sizeof(uint8_t) * clearDataLength);
 
 	switch(out[0]) {
 	case 0:
-		memcpy(clearData, out+offset, clearDataLength);
+		memcpy(clearData, out + offset, clearDataLength);
 		break;
 	case 1:
 	case 2:
 		// TODO: AES encoding
 	default:
-		for(int i=0; i < clearDataLength; i++) {
-			clearData[i] = out[i+offset] ^ key[i % keylen];
+		for(int i = 0; i < clearDataLength; i++) {
+			clearData[i] = out[i + offset] ^ key[i % keylen];
 		}
 		break;
 	}
@@ -102,21 +101,21 @@ void ScProto::parse(ScCommands& commands, const char *in, uint8_t *key /*= NULL 
 
 	char value[255] = {0};
 	// 4. Processing Commands
-	for(int i=0; i<clearDataLength;) {
-		int type =clearData[i++];
-		int length =clearData[i++];
+	for(int i = 0; i < clearDataLength;) {
+		int type = clearData[i++];
+		int length = clearData[i++];
 
 		debugf("TL: %d,%d", type, length);
 
-		if(i+length > clearDataLength) {
+		if(i + length > clearDataLength) {
 			// detect broken TLVs
 			break;
 		}
 
-		memcpy(value, clearData+i, length);
+		memcpy(value, clearData + i, length);
 		value[length] = 0;
 
-		debugf("TLV: %d,%d,%s", type, length, (char *)value);
+		debugf("TLV: %d,%d,%s", type, length, (char*)value);
 
 		commands[type] = String(value, length);
 		i += length;

@@ -21,42 +21,43 @@
 #include "updater.h"
 #include "tsb.h"
 #include "misc.h"
-#include <spi_flash.h>
+#include <esp_spi_flash.h>
 
-FwUpdater::FwUpdater(int cpu1ResetPin) {
+FwUpdater::FwUpdater(int cpu1ResetPin)
+{
 	this->cpu1ResetPin = cpu1ResetPin;
 	rboot_get_rtc_data(&rtc);
 
 	bootConfig = rboot_get_config();
 }
 
-FwUpdater::~FwUpdater() {
-	if(baseRequest != NULL) {
-		delete baseRequest;
-	}
-	if(httpClient != NULL) {
-		delete httpClient;
-	}
-	if(otaUpdater != NULL) {
-		delete otaUpdater;
-	}
+FwUpdater::~FwUpdater()
+{
+	delete baseRequest;
+	delete httpClient;
+	delete otaUpdater;
+	baseRequest = NULL;
+	httpClient = NULL;
+	otaUpdater = NULL;
 }
 
-bool FwUpdater::update(const String& url, const DeviceInfo& info, bool optionalUpdates  /* = false */) {
+bool FwUpdater::update(const String& url, const DeviceInfo& info, bool optionalUpdates /* = false */)
+{
 	return check(url, info, RequestCompletedDelegate(&FwUpdater::checkCallback, this), optionalUpdates);
 }
 
-bool FwUpdater::check(const String& url, const DeviceInfo& info, RequestCompletedDelegate onCheckCallback, bool optionalUpdates /* = false */) {
+bool FwUpdater::check(const String& url, const DeviceInfo& info, RequestCompletedDelegate onCheckCallback,
+					  bool optionalUpdates /* = false */)
+{
 	if(httpClient == NULL) {
 		httpClient = new HttpClient();
 	}
 
-	HttpRequest *request;
+	HttpRequest* request;
 	if(baseRequest != NULL) {
 		request = baseRequest->clone();
-	}
-	else {
-		request = httpClient->request(url);
+	} else {
+		request = httpClient->createRequest(url);
 	}
 
 	request->setURL(URL(url));
@@ -76,31 +77,36 @@ bool FwUpdater::check(const String& url, const DeviceInfo& info, RequestComplete
 	return httpClient->send(request);
 }
 
-int FwUpdater::checkCallback(HttpConnection& connection, bool successful) {
+int FwUpdater::checkCallback(HttpConnection& connection, bool successful)
+{
 	debug_d("after Check Callback");
 
 	if(!successful) {
-		debug_e("Update failed. Response Code: %d", connection.getResponseCode());
+		debug_e("Update failed. Response Code: %d", connection.getResponse()->code);
 		return -1;
 	}
 
-	UpdateURL *urls = new UpdateURL();
+	UpdateURL* urls = new UpdateURL();
 	Vector<String> lines;
 	Vector<String> parts;
 
 	// type(FW1 | FW2)|download-url|version|min-version.
-	String body = connection.getResponseString();
+	String body = connection.getResponse()->getBody();
 	splitString(body, '\n', lines);
 
-	for(int i=0; i<lines.count(); i++) {
+	for(unsigned i = 0; i < lines.count(); i++) {
 		String line = lines[i];
 		splitString(line, '|', parts);
+		FwType type = (FwType)parts[0].toInt();
+		switch(type) {
+		case FwType::TYPE_FW1:
+		case FwType::TYPE_FW2:
+			(*urls)[type] = parts[1];
+			break;
 
-		if(parts[0] == "0") {
-			(*urls)[FwType::TYPE_FW2] = parts[1];
-		}
-		else if (parts[0] == "1") {
-			(*urls)[FwType::TYPE_FW1] = parts[1];
+		default:
+			debugf("Invalid type: %d", type);
+			break;
 		}
 	}
 
@@ -117,42 +123,42 @@ int FwUpdater::checkCallback(HttpConnection& connection, bool successful) {
 	return 0;
 }
 
-bool FwUpdater::doUpdate(UpdateURL *urls) {
+bool FwUpdater::doUpdate(UpdateURL* urls)
+{
 	if(!urls->count()) {
 		return false;
 	}
 
-	uint8_t slot;
-
 	debug_d("Updating...");
 
 	// need a clean object, otherwise if run before and failed will not run again
-	if (otaUpdater)
+	if(otaUpdater)
 		delete otaUpdater;
-	otaUpdater = new rBootHttpUpdate();
+	otaUpdater = new RbootHttpUpdater();
 
 #ifdef ENABLE_SSL
 	otaUpdater->setBaseRequest(baseRequest);
 #endif
 
-	// select rom slot to flash
-	slot = bootConfig.current_rom;
-	if (slot == 0)
-		slot = 1;
-	else
-		slot = 0;
-
-	if (urls->contains(FwType::TYPE_FW2)) {
-		fw |= (int)FwType::TYPE_FW2;
-		otaUpdater->addItem(bootConfig.roms[slot], (*urls)[FwType::TYPE_FW2]);
-	}
-
-#if ENABLE_OTA_TSB == 1
-	if (urls->contains(FwType::TYPE_FW1)) {
+#if ENABLE_OTA_TSB
+	// NOTICE: The MCU1 ROM must be the first to download!
+	if(urls->contains(FwType::TYPE_FW1)) {
 		fw |= (int)FwType::TYPE_FW1;
 		otaUpdater->addItem(TSB_CURRENT_ROM_ADDR, (*urls)[FwType::TYPE_FW1]);
 	}
 #endif
+
+	if(urls->contains(FwType::TYPE_FW2)) {
+		uint8_t slot = bootConfig.current_rom;
+		if(slot == 0) {
+			slot = 1;
+		} else {
+			slot = 0;
+		}
+
+		fw |= (int)FwType::TYPE_FW2;
+		otaUpdater->addItem(bootConfig.roms[slot], (*urls)[FwType::TYPE_FW2]);
+	}
 
 	// and/or set a callback (called on failure or success without switching requested)
 	otaUpdater->setCallback(OtaUpdateDelegate(&FwUpdater::updateCallBack, this));
@@ -160,14 +166,15 @@ bool FwUpdater::doUpdate(UpdateURL *urls) {
 	// start update
 	otaUpdater->start();
 
-	if(urls!=NULL) {
+	if(urls != NULL) {
 		delete urls;
 	}
 
 	return true;
 }
 
-void FwUpdater::updateCallBack(rBootHttpUpdate& client, bool result) {
+void FwUpdater::updateCallBack(RbootHttpUpdater& client, bool result)
+{
 	debug_d("In OTA callback...");
 
 	if(!result) {
@@ -175,11 +182,15 @@ void FwUpdater::updateCallBack(rBootHttpUpdate& client, bool result) {
 		return;
 	}
 
-	uint8_t slot = bootConfig.current_rom;;
-	if (slot == 0) slot = 1; else slot = 0;
+	if(bitsSet(fw, (int)FwType::TYPE_FW2)) {
+		uint8_t slot = bootConfig.current_rom;
+		if(slot == 0) {
+			slot = 1;
+		} else {
+			slot = 0;
+		}
 
-	if(fw & (int)FwType::TYPE_FW2) {
-		if(!(fw & (int)FwType::TYPE_FW1)) { // if only FW2 is updated
+		if(!bitsSet(fw, (int)FwType::TYPE_FW1)) { // if only FW2 is updated
 			// set to boot new rom and then reboot
 			debug_d("FW2 updated, setting temporary ROM to %d...", slot);
 			rboot_set_temp_rom(slot);
@@ -189,56 +200,13 @@ void FwUpdater::updateCallBack(rBootHttpUpdate& client, bool result) {
 		rboot_set_current_rom(slot);
 	}
 
-	slot = (fw & (int)FwType::TYPE_FW2) ? 1: 0;
-	rBootHttpUpdateItem item = client.getItem(slot);
-
-	debug_d("Slot: %d, Item.size: %d", slot, item.size);
-
-	// TODO: Check the response headers for that information
-//	String minVersion = client.getResponseHeader("X-FW2-Min");
-	int minFW2Version = 0;
-
-	bool success = true;
-	if(item.size < 1) {
-		success = false;
+	if(bitsSet(fw, (int)FwType::TYPE_FW1)) {
+		RbootHttpUpdaterItem item = client.getItem(0); // the fist item is always the MCU1
+		FwUpdateMark mark;
+		mark.size = item.size;
+		mark.minVersion = 0; // TODO: hard-coded value...
+		storeMark(mark);
 	}
-
-#ifdef TSB_CHECK_HEX
-	if(success) {
-		// check FW1
-		uint8_t *data = readFwData(item.size);
-		if(data) {
-			Tsb tsb(&Serial);
-			success = tsb.checkHex(data, item.size);
-			if (!success) {
-				debug_e("HEX CheckSum failed.");
-			}
-
-			delete[] data;
-		}
-		else {
-			debug_e("Unable to read the hex data.");
-			success = false;
-		}
-	}
-#endif
-
-	debug_d("Preparing to restart...");
-
-	if(!success) {
-		if(fw & (int)FwType::TYPE_FW2) {
-			System.restart();
-		}
-
-		Serial.write('X'); // this will inform the other side to NOT reset
-
-		return;
-	}
-
-	FwUpdateMark mark;
-	mark.size = item.size;
-	mark.minVersion = minFW2Version;
-	storeMark(mark);
 
 	// Inform about RESET
 	Serial.write('F'); // this will inform the other side to RESET
@@ -246,12 +214,13 @@ void FwUpdater::updateCallBack(rBootHttpUpdate& client, bool result) {
 	// after the last command CPU1 should be reset causing also CPU2 to power off.
 
 	// we should not be here but ...
-	if(fw & (int)FwType::TYPE_FW2) {
+	if(bitsSet(fw, (int)FwType::TYPE_FW2)) {
 		System.restart();
 	}
 }
 
-void FwUpdater::setBaseRequest(HttpRequest *request) {
+void FwUpdater::setBaseRequest(HttpRequest* request)
+{
 	baseRequest = request;
 }
 
@@ -259,11 +228,12 @@ void FwUpdater::setBaseRequest(HttpRequest *request) {
  * Returns if there is a pending update that is not yet applied.
  * Basically it checks if we are using temporary ROM and the PENDING_UPDATE flag is set
  */
-bool FwUpdater::pending() {
+bool FwUpdater::pending()
+{
 #if ENABLE_OTA_DEFAULT_ROM == 1
 	if(bootConfig.mode == MODE_GPIO_ROM) {
 		debug_d("************** RUNNING DEFAULT BOOT ROM ********************");
-#if ENABLE_OTA_TSB == 1
+#if ENABLE_OTA_TSB
 		return true;
 #endif
 	}
@@ -271,7 +241,7 @@ bool FwUpdater::pending() {
 	return false;
 #else
 
-#if ENABLE_OTA_TSB == 1
+#if ENABLE_OTA_TSB
 	FwUpdateMark mark = readMark();
 
 	return (mark.size > 0);
@@ -282,29 +252,30 @@ bool FwUpdater::pending() {
 #endif
 }
 
-bool FwUpdater::postUpdate(const String& password /*  = "" */) {
-
-#if ENABLE_OTA_TSB == 1
+bool FwUpdater::postUpdate(const String& password /*  = "" */)
+{
+#if ENABLE_OTA_TSB
 	uint32_t markAddr = TSB_CURRENT_MARK_ADDR;
 	uint32_t romAddr = TSB_CURRENT_ROM_ADDR;
 
 #if ENABLE_OTA_DEFAULT_ROM == 1
 	if(bootConfig.mode == MODE_GPIO_ROM) {
 		markAddr = TSB_DEFAULT_MARK_ADDR;
-		romAddr  = TSB_DEFAULT_ROM_ADDR;
+		romAddr = TSB_DEFAULT_ROM_ADDR;
 	}
 #endif
 
 	FwUpdateMark mark = readMark(markAddr);
 
-	debug_d("Mark size: %d", mark.size);
+	//	debug_d("Mark size: %d", mark.size);
+	//	Serial.printf("Mark size: %d", mark.size);
 
 	if(mark.size < 1) {
 		return false;
 	}
 
 	// TODO: Check minVersion
-	uint8_t *firmwareData = readFwData(mark.size, romAddr);
+	uint8_t* firmwareData = readFwData(mark.size, romAddr);
 	if(!firmwareData) {
 		debug_e("Unable to read the FW1 data");
 
@@ -312,9 +283,9 @@ bool FwUpdater::postUpdate(const String& password /*  = "" */) {
 	}
 
 	Tsb tsb(&Serial);
-	if (!tsb.connect(password)) {
+	if(!tsb.connect(password)) {
 		debug_e("Unable to communicate with TSB");
-		logInfo("Unable to communicate with TSB");
+		//		logInfo("Unable to communicate with TSB");
 		delete[] firmwareData;
 
 		return false;
@@ -322,7 +293,7 @@ bool FwUpdater::postUpdate(const String& password /*  = "" */) {
 
 	logInfo("Connected to TSB");
 
-	size_t bytesWritten  = tsb.writeFlash(firmwareData, mark.size);
+	size_t bytesWritten = tsb.writeFlash(firmwareData, mark.size);
 
 #ifdef REMOTE_DEBUG
 	char value[250] = {0};
@@ -330,7 +301,7 @@ bool FwUpdater::postUpdate(const String& password /*  = "" */) {
 	logInfo(String(value));
 #endif
 
-	if (bytesWritten != mark.size) {
+	if(bytesWritten != mark.size) {
 		debug_e("Unable to write the new flash data!");
 		delete[] firmwareData;
 
@@ -338,11 +309,12 @@ bool FwUpdater::postUpdate(const String& password /*  = "" */) {
 	}
 
 	// IDEA: Count the unsuccessful attempts and clear the mark if more than X failures.
-	if(bootConfig.mode != MODE_GPIO_ROM) {
+	if(rtc.last_rom != bootConfig.gpio_rom) {
+		debug_d("Clearing the mark...");
 		clearMark();
 	}
 
-	logInfo("TSB: Finish");
+	//	logInfo("TSB: Finish");
 
 	delete[] firmwareData;
 
@@ -354,28 +326,27 @@ bool FwUpdater::postUpdate(const String& password /*  = "" */) {
 	return true;
 }
 
-bool FwUpdater::storeMark(FwUpdateMark mark, uint32_t startAddr /*= TSB_CURRENT_MARK_ADDR */) {
+bool FwUpdater::storeMark(FwUpdateMark mark, uint32_t startAddr /*= TSB_CURRENT_MARK_ADDR */)
+{
 	int markSize = sizeof(FwUpdateMark);
 
 	// calculate checksum
 	mark.checksum = mark.size ^ mark.minVersion;
 
-	uint8_t *addr = (uint8 *)&mark;
+	flashmem_erase_sector(flashmem_get_sector_of_address(startAddr));
+	int written = flashmem_write(&mark, startAddr, markSize);
 
-	spi_flash_erase_sector(startAddr / SPI_FLASH_SEC_SIZE);
-	int error = spi_flash_write(startAddr, (uint32*)((void*)addr), markSize);
+	debug_d("Writing flash data. Wrote %d bytes.", written);
 
-	debug_d("Writing flash data. Error code: %d", error);
-
-	return (!error);
+	return (written == markSize);
 }
 
-FwUpdateMark FwUpdater::readMark(uint32_t startAddr /* = TSB_CURRENT_MARK_ADDR */) {
+FwUpdateMark FwUpdater::readMark(uint32_t startAddr /* = TSB_CURRENT_MARK_ADDR */)
+{
 	FwUpdateMark mark;
 	int markSize = sizeof(FwUpdateMark); // IMPORTANT - the size must always be aligned to the 4th byte boundary
 
-	uint8_t *addr = (uint8 *)&mark;
-	spi_flash_read(startAddr, (uint32*)((void*)addr), markSize);
+	flashmem_read(&mark, startAddr, markSize);
 
 	if(mark.checksum != (mark.size ^ mark.minVersion)) {
 		mark.size = 0;
@@ -386,7 +357,8 @@ FwUpdateMark FwUpdater::readMark(uint32_t startAddr /* = TSB_CURRENT_MARK_ADDR *
 	return mark;
 }
 
-bool FwUpdater::clearMark() {
+bool FwUpdater::clearMark()
+{
 	FwUpdateMark mark;
 	mark.size = 0;
 	mark.minVersion = 0;
@@ -394,20 +366,21 @@ bool FwUpdater::clearMark() {
 
 	return storeMark(mark);
 }
-uint8_t* FwUpdater::readFwData(int size,  uint32_t startAddr) {
+uint8_t* FwUpdater::readFwData(int size, uint32_t startAddr)
+{
 	if(size % 4) { // align the size to 4 byte boundary
-		size = ((size / 4 ) +1 ) * 4;
+		size = ((size / 4) + 1) * 4;
 	}
-	uint8_t *data = new uint8_t[size];
+	uint8_t* data = new uint8_t[size];
 
 	if(!data) {
 		debug_e("Unable to allocate memory for FW1");
 		return NULL;
 	}
 
-	int  error = spi_flash_read(startAddr, (uint32*)((void*)data), size);
-	if(error) {
-		debug_e("FwUpdater::readFwData got error: %d", error);
+	int read = flashmem_read(data, startAddr, size);
+	if(read != size) {
+		debug_e("FwUpdater::readFwData read only %d bytes", read);
 		delete[] data;
 
 		return NULL;

@@ -8,14 +8,14 @@
   "devDependencies": {
     "del": "^2.2.1",
     "gulp": "^3.9.1",
-    "gulp-clean-css": "^2.0.10",
+    "gulp-clean-css": "^2.3.2",
     "gulp-gzip": "^1.4.0",
     "gulp-htmlmin": "^2.0.0",
     "gulp-if": "^2.0.1",
     "gulp-inline": "^0.1.1",
-    "gulp-plumber": "^1.1.0",
+    "gulp-plumber": "^1.2.1",
     "gulp-uglify": "^1.5.3",
-    "gulp-useref": "^3.1.2",
+    "gulp-useref": "^3.1.6",
     "yargs": "^5.0.0"
   },
   "dependencies": {}

@@ -20,7 +20,6 @@
 #ifndef MCU2_INCLUDE_FWUPDATER_H_
 #define MCU2_INCLUDE_FWUPDATER_H_
 
-#include <user_config.h>
 #include <SmingCore.h>
 
 #include <Network/HttpClient.h>
@@ -29,7 +28,7 @@
 
 enum class FwType {
 	TYPE_FW1 = 1, // Firmware for CPU1 - Attiny
-	TYPE_FW2      //  Firmware for CPU2 - ESP8266
+	TYPE_FW2	  //  Firmware for CPU2 - ESP8266
 };
 
 typedef struct {
@@ -37,7 +36,6 @@ typedef struct {
 	char* fw1v;
 	char* fw2v;
 } DeviceInfo;
-
 
 typedef struct {
 	uint32_t size = 0;
@@ -48,17 +46,17 @@ typedef struct {
 
 typedef HashMap<FwType, String> UpdateURL;
 
-class FwUpdater {
+class FwUpdater
+{
 public:
-
-	int fw = 0; /* 0b00- no firmware was update, 0b01 - FW1 was update, 0b10 - FW2 was update, 0b11-both FW1 and FW2 were updated
+	int fw =
+		0; /* 0b00- no firmware was update, 0b01 - FW1 was update, 0b10 - FW2 was update, 0b11-both FW1 and FW2 were updated
 
 	/*
 	 * Sets the URL from where the update information will be fetched
 	 */
 	FwUpdater(int cpu1ResetPin);
 	~FwUpdater();
-
 
 	/**
 	* Checks if there are new versions and if yes, uploads and applies them
@@ -86,13 +84,14 @@ public:
 	 *
 	 * Returns list of firmware URLs
 	 */
-	bool check(const String& url, const DeviceInfo& info, RequestCompletedDelegate onCheckCallback, bool optionalUpdates = false);
+	bool check(const String& url, const DeviceInfo& info, RequestCompletedDelegate onCheckCallback,
+			   bool optionalUpdates = false);
 
 	/**
 	 * Performs URL on the provided URLs.
 	 * It does not check at all if the firmware version installed is newer then the one from the remote url.
 	 */
-	bool doUpdate(UpdateURL *urls);
+	bool doUpdate(UpdateURL* urls);
 
 	/**
 	 * Callback handler that is called after the check has finished
@@ -102,7 +101,7 @@ public:
 	/**
 	 * Called When the Update is read
 	 */
-	void updateCallBack(rBootHttpUpdate& client, bool result);
+	void updateCallBack(RbootHttpUpdater& client, bool result);
 
 	/* Sets the base request that can be used to pass
 	 * - default request parameters, like request headers...
@@ -112,7 +111,7 @@ public:
 	 *
 	 * @param HttpRequest *
 	 */
-	void setBaseRequest(HttpRequest *request);
+	void setBaseRequest(HttpRequest* request);
 
 private:
 	/**
@@ -141,7 +140,7 @@ private:
 	rboot_rtc_data rtc;
 	rboot_config bootConfig;
 	int cpu1ResetPin;
-	rBootHttpUpdate* otaUpdater = 0;
+	RbootHttpUpdater* otaUpdater = 0;
 	HttpClient* httpClient = 0;
 
 	HttpRequest* baseRequest = NULL;

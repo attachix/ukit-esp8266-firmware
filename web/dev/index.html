@@ -1,3 +1,20 @@
+<html>
 <body>
-hellow world.
+	<form action="/cmd" method="POST">
+		Choose command: <select name="cmd">
+			<optgroup label="Change Mode">
+				<option value="A">Smoke</option>
+				<option value="B">Alarm</option>
+				<option value="D">Smart Alarm</option>
+				<option value="H">Smart Protection</option>
+			</optgroup>
+			<optgroup label="Or">
+				<option value="F">Firmware Update</option>
+				<option value="X">Cancel</option>
+			</optgroup>
+
+		</select>
+		<input type="submit" value="Go!"/>
+	</form>
 </body>
+</html>

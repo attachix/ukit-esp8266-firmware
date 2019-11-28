@@ -17,10 +17,15 @@
  * along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MCU2_LIB_CORE_MISC_H_
-#define MCU2_LIB_CORE_MISC_H_
+/*
+ * misc.h
+ *
+ *  Created on: Jul 28, 2016
+ *      Author: slavey
+ */
 
-#include <user_config.h>
+#pragma once
+
 #include <SmingCore.h>
 
 /* Basic Logging */
@@ -34,6 +39,4 @@ void logInfo(String message);
 #endif
 
 /* Utility functions */
-char* txt2hex(const char *text, int size);
-
-#endif /* MCU2_LIB_CORE_MISC_H_ */
+char* txt2hex(const char* text, int size);

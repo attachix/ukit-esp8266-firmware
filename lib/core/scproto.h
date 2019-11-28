@@ -17,28 +17,27 @@
  * along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MCU2_INCLUDE_SCPROTO_H_
-#define MCU2_INCLUDE_SCPROTO_H_
+/*
+ * scproto.h
+ *
+ *  Created on: Jun 15, 2016
+ *      Author: slavey
+ */
 
-#include <user_config.h>
+#pragma once
+
 #include <SmingCore.h>
 
-enum class ScProtoType {
-	TYPE_CONTINUATION = 0,
-	TYPE_PASSWORD,
-	TYPE_OWNER,
-	TYPE_MODE,
-	TYPE_OTA
-};
+enum class ScProtoType { TYPE_CONTINUATION = 0, TYPE_PASSWORD, TYPE_OWNER, TYPE_MODE, TYPE_OTA };
 
-typedef HashMap<int,String> ScCommands;
+typedef HashMap<int, String> ScCommands;
 
-class ScProto {
+class ScProto
+{
 public:
-	void parse(ScCommands& commands, const char *in,  uint8_t *key = NULL, int keylen = 0);
-private:
-	int32_t hashCode(uint8_t *data, int length);
-	bool compareChecksum(int32_t n, uint8_t *bytes);
-};
+	void parse(ScCommands& commands, const char* in, uint8_t* key = NULL, int keylen = 0);
 
-#endif /* MCU2_INCLUDE_SCPROTO_H_ */
+private:
+	int32_t hashCode(uint8_t* data, int length);
+	bool compareChecksum(int32_t n, uint8_t* bytes);
+};

@@ -18,23 +18,33 @@
 // along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#include "app-data.h"
+/*
+ * app-data.c
+ *
+ *  Created on: Feb 11, 2016
+ *      Author: slavey
+ */
 
-AppData::AppData(uint32_t startAddress) {
+#include "app-data.h"
+#include <esp_spi_flash.h>
+
+AppData::AppData(uint32_t startAddress)
+{
 	this->startAddress = startAddress;
 }
 
-bool AppData::load() {
+bool AppData::load()
+{
 	uint8_t buffer[sizeof(AppDataType)];
 
-	int error = spi_flash_read(startAddress, (uint32*) ((void*) buffer), sizeof(AppDataType));
-	if (error) {
-		debugf("Unable to read application data. Got error: %d", error);
+	int read = flashmem_read(buffer, startAddress, sizeof(AppDataType));
+	if(read != sizeof(AppDataType)) {
+		debugf("Unable to read application data. Read only %d bytes", read);
 
 		return false;
 	}
 
-	const AppDataType *tempData = (AppDataType *)buffer;
+	const AppDataType* tempData = (AppDataType*)buffer;
 	if(tempData->magic != DATA_MAGIC) {
 		debugf("AppData: Invalid magic!");
 
@@ -46,17 +56,12 @@ bool AppData::load() {
 	return true;
 }
 
-bool AppData::save() {
-	uint8_t *addr = (uint8 *)&data;
-
-	spi_flash_erase_sector(startAddress / SPI_FLASH_SEC_SIZE);
-
-	ETS_UART_INTR_DISABLE();
-	int error = spi_flash_write(startAddress, (uint32*)((void*)addr), sizeof(AppDataType));
-	ETS_UART_INTR_ENABLE();
-
-	if(error) {
-		debugf("Unable to write application data. Got error: %d", error);
+bool AppData::save()
+{
+	flashmem_erase_sector(flashmem_get_sector_of_address(startAddress));
+	int written = flashmem_write(&data, startAddress, sizeof(AppDataType));
+	if(written != sizeof(AppDataType)) {
+		debugf("Unable to write application data. Wrote only %d bytes.", written);
 
 		return false;
 	}
@@ -64,8 +69,9 @@ bool AppData::save() {
 	return true;
 }
 
-bool AppData::migrate() {
-	if(data.version  < 2) {
+bool AppData::migrate()
+{
+	if(data.version < 2) {
 		// Add here the needed migrations...
 	}
 

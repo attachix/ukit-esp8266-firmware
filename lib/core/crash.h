@@ -17,10 +17,15 @@
  * along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MCU2_LIB_CORE_CRASH_H_
-#define MCU2_LIB_CORE_CRASH_H_
+/*
+ * crash.h
+ *
+ *  Created on: Jul 28, 2016
+ *      Author: slavey
+ */
 
-#include <user_config.h>
+#pragma once
+
 #include <SmingCore.h>
 #include <rboot.h>
 
@@ -32,16 +37,15 @@
 
 typedef struct {
 	uint8_t count = 0; // the number of crashes per rom.
-	rst_info reason; // reasons for the last crash
-	uint32_t ms = 0; // milliseconds from start until the crash
+	rst_info reason;   // reasons for the last crash
+	uint32_t ms = 0;   // milliseconds from start until the crash
 	uint32_t sf[CRASH_MAX_STACK_FRAME_LINES * 5] = {0};
 } CrashType;
 
 typedef struct {
-	uint32_t  magic=CRASH_DATA_MAGIC;
+	uint32_t magic = CRASH_DATA_MAGIC;
 	CrashType rom[MAX_ROMS];
 } CrashDataType;
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,10 +57,8 @@ bool saveCrashData(CrashDataType* data);
 /**
  * Custom Crash Handler
  */
-void custom_crash_callback( struct rst_info * rst_info, uint32_t stack, uint32_t stack_end );
+void custom_crash_callback(struct rst_info* rst_info, uint32_t stack, uint32_t stack_end);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* MCU2_LIB_CORE_CRASH_H_ */

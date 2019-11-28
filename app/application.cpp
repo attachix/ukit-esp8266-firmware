@@ -18,8 +18,12 @@
 // along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#include <user_config.h>
-#include <SmingCore/SmingCore.h>
+#include <SmingCore.h>
+#include <esp_spi_flash.h>
+
+#ifdef ARCH_HOST
+#include <esp_mock.h>
+#endif
 
 #include "cli.h"
 #include "scproto.h"
@@ -48,23 +52,23 @@ String devicePsk = "";
 #ifndef RELEASE
 void ShowInfo()
 {
-    debugf("\n");
-    debugf("Firmware version: %s", FW_VERSION);
-    debugf("SDK: v%s", system_get_sdk_version());
-    debugf("Free Heap: %d", system_get_free_heap_size());
-    debugf("CPU Frequency: %d MHz", system_get_cpu_freq());
-    debugf("System Chip ID: %x", system_get_chip_id());
-    debugf("SPI Flash ID: %x", spi_flash_get_id());
-    debugf("SPI Flash Size: %d", (1 << ((spi_flash_get_id() >> 16) & 0xff)));
+	debugf("\n");
+	debugf("Firmware version: %s", FW_VERSION);
+	debugf("SDK: v%s", system_get_sdk_version());
+	debugf("Free Heap: %d", system_get_free_heap_size());
+	debugf("CPU Frequency: %d MHz", system_get_cpu_freq());
+	debugf("System Chip ID: %x", system_get_chip_id());
+	debugf("SPI Flash ID: %x", spi_flash_get_id());
+	debugf("SPI Flash Size: %d", (1 << ((spi_flash_get_id() >> 16) & 0xff)));
 
-    rboot_config conf;
-    conf = rboot_get_config();
+	rboot_config conf;
+	conf = rboot_get_config();
 
-    debugf("Count: %d", conf.count);
-    debugf("ROM 0: %d", conf.roms[0]);
-    debugf("ROM 1: %d", conf.roms[1]);
-    debugf("ROM 2: %d", conf.roms[2]);
-    debugf("GPIO ROM: %d", conf.gpio_rom);
+	debugf("Count: %d", conf.count);
+	debugf("ROM 0: %d", conf.roms[0]);
+	debugf("ROM 1: %d", conf.roms[1]);
+	debugf("ROM 2: %d", conf.roms[2]);
+	debugf("GPIO ROM: %d", conf.gpio_rom);
 
 	// mount spiffs
 	uint8_t slot = 0;
@@ -72,18 +76,17 @@ void ShowInfo()
 	rboot_get_rtc_data(&rtc);
 	slot = rtc.last_rom;
 
-	debugf("Current rom used: %d. Mode: %d", slot, rtc.last_mode);
+	debugf("Current ROM: %d. RTC ROM: %d. RTC Mode: %d", conf.current_rom, slot, rtc.last_mode);
 #ifdef RBOOT_GPIO_ENABLED
 	debugf("=== GPIO ENABLED ===");
 #endif /* RBOOT_GPIO_ENABLED */
 
 	int i = 0;
-	char *psk = loadPsk(&i);
+	char* psk = loadPsk(&i);
 	debugf("PSK: %s", psk);
-
+	free(psk);
 }
-#endif /* RELEASE */
-
+#else
 // Blinker
 #define LED_PIN 2 // GPIO2
 Timer blinkTimer;
@@ -94,27 +97,36 @@ void blink()
 	digitalWrite(LED_PIN, state);
 	state = !state;
 }
+#endif			  /* RELEASE */
 
-void respondAndHalt(String content, uint32_t msDelay=50);
+void respondAndHalt(String content, uint32_t msDelay = 50);
 
 // MQTT client
-MqttClient *mqtt = nullptr;
+MqttClient* mqtt = nullptr;
 String globalResponse;
 
 MqttClient* getMqttClient()
 {
-	if (mqtt == nullptr) {
-		mqtt = new MqttClient(appData->data.mqttHost, appData->data.mqttPort);
+	if(mqtt == nullptr) {
+		mqtt = new MqttClient();
 		mqtt->addSslOptions(SSL_SERVER_VERIFY_LATER);
-		mqtt->connect(deviceId, appData->data.owner, devicePsk, true);
+		Url url;
+		url.Scheme = "mqtts";
+		url.Host = appData->data.mqttHost;
+		url.Port = appData->data.mqttPort;
+		url.User = appData->data.owner;
+		url.Password = devicePsk;
+
+		mqtt->connect(url, deviceId);
 	}
 
 	return mqtt;
 }
 
-void mqttPublishCompleted(uint16_t msgId, int type)
+int mqttPublishCompleted(MqttClient& client, mqtt_message_t* message)
 {
 	respondAndHalt(globalResponse, 0);
+	return 0;
 }
 
 void respondAndHalt(String content, uint32_t msDelay /* =50 */)
@@ -132,7 +144,13 @@ void respondAndHalt(String content, uint32_t msDelay /* =50 */)
 void sendAndHalt(String topic, String message, String response)
 {
 	getMqttClient();
-	if(mqtt->publishWithQoS(topic, message, 1, true, mqttPublishCompleted)) {
+
+	uint8_t QoS = 1;
+	bool retained = 1;
+	uint8_t flags = (uint8_t)(retained + (QoS << 1));
+
+	mqtt->setPublishedHandler(mqttPublishCompleted);
+	if(mqtt->publish(topic, message, flags)) {
 		globalResponse = response;
 		return;
 	}
@@ -144,31 +162,31 @@ void sendAndHalt(String topic, String message, String response)
 #include "commands/testmode.h"
 #include "commands/ota.h"
 #include "commands/jsvm.h"
-#include "commands/webserver.h"
+#include "commands/webconfig.h"
 
 void ready()
 {
 	// Send the ready response
 	Serial.print(PROTOCOL_READY);
 
-	// Commented out temporary. It is part of the original code!
-#if 0
+	rboot_rtc_data rtc;
+	rboot_get_rtc_data(&rtc);
 	if(rtc.last_mode == MODE_TEMP_ROM) {
+		uint8_t slot = rtc.last_rom;
 		// nothing died until now, switch permanently to this ROM
 		debugf("Switching permanently to ROM %d", slot);
 		rboot_set_current_rom(slot);
 	}
-#endif
 }
 
-void connectOk(IPAddress ip, IPAddress netmask, IPAddress gateway)
+void connectOk(IpAddress ip, IpAddress netmask, IpAddress gateway)
 {
 	// Enable networking commands
 	debug_d("===Connected to the network!====");
 	cli.setFlag(CLI_CMD_NETWORK);
 }
 
-void connectFail(String ssid, uint8_t ssidLength, uint8_t bssid[6], uint8_t reason)
+void connectFail(String ssid, const MacAddress& bssid, WifiDisconnectReason reason)
 {
 	// disable networking commands
 	cli.unsetFlag(CLI_CMD_NETWORK);
@@ -186,14 +204,16 @@ void init()
 #else
 	Serial.systemDebugOutput(false);
 #endif /* DEBUG */
-	
+
 #if ENABLE_OTA == 1
 	// up to here already 300ms have elapsed
 	fwUpdater = new FwUpdater(CPU1_PIN);
 	if(fwUpdater->pending()) {
 		debugf("== Entering OTA mode ...");
+#ifdef RELEASE
 		pinMode(LED_PIN, OUTPUT);
 		blink();
+#endif							 /* RELEASE */
 		fwUpdater->postUpdate(); // TODO: Add later the password
 		debugf("== Out of OTA mode ...");
 	}
@@ -208,15 +228,15 @@ void init()
 
 	// [ Register commands ]
 	cli.init();
-	cli.addCommand(PROTOCOL_COMMAND_CONFIG, 	 0, cmdModeSmartConfig);
+	cli.addCommand(PROTOCOL_COMMAND_CONFIG, 0, cmdModeSmartConfig);
 	// -- commands that require valid network connection
-	cli.addCommand(PROTOCOL_COMMAND_SMOKE, 		 1, cmdEventSmoke, CLI_CMD_NETWORK);
+	cli.addCommand(PROTOCOL_COMMAND_SMOKE, 1, cmdEventSmoke, CLI_CMD_NETWORK);
 	cli.addCommand(PROTOCOL_COMMAND_TEMPERATURE, 1, cmdEvent, CLI_CMD_NETWORK);
-	cli.addCommand(PROTOCOL_COMMAND_MOTION,		 1, cmdEvent, CLI_CMD_NETWORK);
-	cli.addCommand(PROTOCOL_COMMAND_BATTERY, 	 1, cmdEvent, CLI_CMD_NETWORK);
+	cli.addCommand(PROTOCOL_COMMAND_MOTION, 1, cmdEvent, CLI_CMD_NETWORK);
+	cli.addCommand(PROTOCOL_COMMAND_BATTERY, 1, cmdEvent, CLI_CMD_NETWORK);
 #if ENABLE_OTA == 1
 	cli.addCommand('o', 1, cmdOtaUpdate, CLI_CMD_NETWORK); // perform OverTheAir Update
-#endif /* ENABLE_OTA == 1 */
+#endif													   /* ENABLE_OTA == 1 */
 
 	System.onReady(ready);
 
@@ -227,39 +247,35 @@ void init()
 	debugf("	c - Simulates ChangeMode command.");
 	debugf("	l - Loads configuration from FS.");
 	debugf("	w[0|1] - Set 'wifiIsSet' flag. w0 - wifi is OFF, w1 - wifi is ON.");
-#if ENABLE_JSVM==1
+#if ENABLE_JSVM == 1
 	debugf("	j[0|1] - Toggle JSVM: j1 - start JSVM. j0 - Stop JSVM. ");
 #endif /* ENABLE_JSVM==1 */
-#if ENABLE_WEBSERVER==1
-	debugf("	s[0|1] - Toggle WebServer: s1 - start WebServer. s0 - Stop WebServer. ");
-#endif /* ENABLE_WEBSERVER==1 */
 	debugf("	m - Simulates detected motion.");
 #if ENABLE_OTA == 1
 	debugf("	o[s|t] - Makes over the air (OTA) update. S-stable, T-testing");
 #endif /* ENABLE_OTA == 1 */
-	debugf("	r[0|1|2] - Switches the ROMs. r0 - temporary switch to next ROM, r1 - permanent switch to next rom., r2 - temp switch to default rom");
+	debugf(
+		"	r[0|1|2] - Switches the ROMs. r0 - temporary switch to next ROM, r1 - permanent switch to next rom., r2 - "
+		"temp switch to default rom");
 	debugf("	f - Shows the free heap.");
 	debugf("	k[0|1] - Crash handler tests. k0 - load and print crash data for current rom, k1 - crash the device");
 	debugf("	test - Performs check for the CLI processor.");
 
 	cli.addCommand('c', 0, cmdModeSmartConfig); // Simulates ChangeMode command.
-	cli.addCommand('l', 0, cmdShowData); // Load configuration
-	cli.addCommand('w', 1, cmdSaveData);  // Toggle Wifi flag and save it w0 - wifi is OFF, w1 - wifi is ON
-#if ENABLE_JSVM==1
-	cli.addCommand('j', 1, cmdPlayJS);  // 0 - stop JSVM, 1 - start JSVM
-#endif /* ENABLE_JSVM==1 */
-#if ENABLE_WEBSERVER==1
-	cli.addCommand('s', 1, cmdToggleWebServer);  // 0 - stop JSVM, 1 - start JSVM
-#endif /* ENABLE_WEBSERVER==1 */
+	cli.addCommand('l', 0, cmdShowData);		// Load configuration
+	cli.addCommand('w', 1, cmdSaveData);		// Toggle Wifi flag and save it w0 - wifi is OFF, w1 - wifi is ON
+#if ENABLE_JSVM == 1
+	cli.addCommand('j', 1, cmdPlayJS); // 0 - stop JSVM, 1 - start JSVM
+#endif								   /* ENABLE_JSVM==1 */
 
-	cli.addCommand('m', 0, cmdFakeMotion, CLI_CMD_NETWORK);  // Motion
+	cli.addCommand('m', 0, cmdFakeMotion, CLI_CMD_NETWORK); // Motion
 	cli.addCommand('r', 1, cmdRomSwitch); // r0 - perform temporary switch r1 - perform permanent switch
 	cli.addCommand('f', 0, cmdFreeHeap);
 	cli.addCommand('x', 0, cmdSoftReset);
 	cli.addCommand('t', 3, cmdTest); // type "test" - performs check for the cli processor
 
 	cli.addCommand('k', 1, cmdCrash); // 0 - load and print crash data for current rom, 1 - crash the device
-#endif /* TEST_MODE */
+#endif								  /* TEST_MODE */
 
 	debugf("Connection status: %d", WifiStation.getConnectionStatus());
 

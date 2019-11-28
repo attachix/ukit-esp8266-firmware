@@ -1,3 +1,7 @@
 [submodule "lib/Sming"]
 	path = lib/Sming
 	url = https://github.com/SmingHub/Sming.git
+[submodule "components/jerryscript/jerryscript"]
+	path = components/jerryscript/jerryscript
+	url = https://github.com/attachix/jerryscript.git
+        ignore = dirty

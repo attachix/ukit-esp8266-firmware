@@ -17,10 +17,15 @@
  * along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MCU2_LIB_CORE_INFO_H_
-#define MCU2_LIB_CORE_INFO_H_
+/*
+ * info.h
+ *
+ *  Created on: Jul 28, 2016
+ *      Author: slavey
+ */
 
-#include <user_config.h>
+#pragma once
+
 #include <SmingCore.h>
 
 #define RBOOT_SIZE 3680 /* !!!! Change this value if the size of rBOOT changes */
@@ -28,11 +33,10 @@
 //#define DEVICE_DATA_ADDR 0x200000
 
 typedef struct {
-	uint32_t id; // Id of the manufacturer
+	uint32_t id;	  // Id of the manufacturer
 	uint32_t factory; // Factory number of the manufacturer
-	char serial[15]; // serial number
+	char serial[15];  // serial number
 } ManufacturerData;
-
 
 typedef struct {
 	char password[50];
@@ -56,18 +60,16 @@ DeviceData* getDeviceData();
  *
  * @return SSLKeyCertPair client certificate or NULL if none exists
  */
-SSLKeyCertPair getDeviceClientCert();
+SslKeyCertPair getDeviceClientCert();
 
 #endif /* ENABLE_SSL */
 
 /**
  * Loads the device PSK
  */
-char* loadPsk(int *keylen);
+char* loadPsk(int* keylen);
 
 /**
  * Gets device unique id
  */
 String getDevUID();
-
-#endif /* MCU2_LIB_CORE_INFO_H_ */

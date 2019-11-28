@@ -17,28 +17,34 @@
  * along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MCU2_INCLUDE_APP_DATA_H_
-#define MCU2_INCLUDE_APP_DATA_H_
+/*
+ * app-data.h
+ *
+ *  Created on: Feb 11, 2016
+ *      Author: slavey
+ */
 
-#include <user_config.h>
+#pragma once
+
 #include <SmingCore.h>
 
 #define DATA_MAGIC (0x58545441u)
 
-#define DATA_FLAG_WIFI 	 bit(1)
+#define DATA_FLAG_WIFI bit(1)
 #define DATA_FLAG_STEALTHMODE bit(2)
 
 typedef struct {
-	uint32_t magic=DATA_MAGIC;
+	uint32_t magic = DATA_MAGIC;
 	uint32_t version = 2;
 	char owner[50] = "\0";
 	char mqttHost[50] = "attachix.com";
 	uint32_t mqttPort = 8883;
-	uint32_t flags= DATA_FLAG_STEALTHMODE;
+	uint32_t flags = DATA_FLAG_STEALTHMODE;
 	/* Reserved for future versions. The total structure can hold up to 4K of data */
 } AppDataType;
 
-class AppData {
+class AppData
+{
 public:
 	AppDataType data;
 
@@ -50,8 +56,7 @@ public:
 	 * @return true if the data was migrated, false if there was no need for migration
 	 */
 	bool migrate();
+
 private:
 	uint32_t startAddress = 0;
 };
-
-#endif /* MCU2_INCLUDE_CLI_H_ */

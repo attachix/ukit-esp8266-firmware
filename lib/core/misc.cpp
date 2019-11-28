@@ -18,14 +18,25 @@
 // along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+/*
+ * misc.h
+ *
+ *  Created on: Jul 28, 2016
+ *      Author: slavey
+ */
 #include "misc.h"
+
+#ifdef ARCH_HOST
+#include <esp_mock.h>
+#endif
 
 /* Basic Logging */
 
 #ifdef REMOTE_DEBUG
 String logData = "";
 
-void logInfo(String message) {
+void logInfo(String message)
+{
 	logData += "|" + message;
 }
 #else
@@ -33,10 +44,11 @@ void logInfo(String message) {
 #endif
 
 /* Utility functions */
-char* txt2hex(const char *text, int size) {
-	char *hex = (char *)malloc(size*2)+1;
-	char *ptr = hex;
-	for(int i=0; i<size; i++) {
+char* txt2hex(const char* text, int size)
+{
+	char* hex = (char*)malloc(size * 2) + 1;
+	char* ptr = hex;
+	for(int i = 0; i < size; i++) {
 		ptr += ets_sprintf(ptr, "%02X", text[i]);
 	}
 	*(ptr + 1) = '\0';

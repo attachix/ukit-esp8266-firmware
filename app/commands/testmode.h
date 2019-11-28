@@ -17,8 +17,7 @@
  * along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __APP_COMMANDS_TESTMODE_H__
-#define __APP_COMMANDS_TESTMODE_H__
+#pragma once
 
 #include "crash.h"
 
@@ -70,35 +69,39 @@ void cmdCrash(char command, char* params);
 
 /* Implementation */
 
-void cmdTest(char command, char* params) {
+void cmdTest(char command, char* params)
+{
 	int argc = sizeof(params);
 	debugf("Got command: %c with %d params", command, argc);
 	if(argc > 0) {
-		debugf("Last parameter was: 0x%x", params[argc-1]);
+		debugf("Last parameter was: 0x%x", params[argc - 1]);
 	}
 }
 
-void cmdFreeHeap(char command, char* params) {
+void cmdFreeHeap(char command, char* params)
+{
 	debugf("Free heap: %d", system_get_free_heap_size());
 }
 
-void cmdSoftReset(char command, char* params) {
+void cmdSoftReset(char command, char* params)
+{
 	System.restart();
 }
 
-void cmdSaveData(char command, char* params) {
+void cmdSaveData(char command, char* params)
+{
 	debugf("Saving: ...");
 	if(params[0] == 0x30) {
 		clearBits(appData->data.flags, DATA_FLAG_WIFI);
-	}
-	else if (params[0] == 0x31) {
+	} else if(params[0] == 0x31) {
 		setBits(appData->data.flags, DATA_FLAG_WIFI);
 	}
 	appData->save();
 	debugf("Saving: Done.");
 }
 
-void cmdShowData(char command, char* params) {
+void cmdShowData(char command, char* params)
+{
 	debugf("================================");
 	debugf("Mqtt Host: %s", appData->data.mqttHost);
 	debugf("Mqtt Port: %d", appData->data.mqttPort);
@@ -107,24 +110,29 @@ void cmdShowData(char command, char* params) {
 	debugf("================================");
 }
 
-void cmdFakeMotion(char command, char* params) {
-	char p[] = {'a','b'};
+void cmdFakeMotion(char command, char* params)
+{
+	char p[] = {'a', 'b'};
 	cmdEvent(PROTOCOL_COMMAND_MOTION, p);
 }
 
-void cmdRomSwitch(char command, char* params) {
+void cmdRomSwitch(char command, char* params)
+{
 	uint8_t slot = 0;
 	if(params[0] == '0') { // zero was presses
 		rboot_get_last_boot_rom(&slot);
-		rboot_set_temp_rom(slot ? 0: 1);
+		rboot_set_temp_rom(slot ? 0 : 1);
 	}
 	if(params[0] == '2') { // switch to default rom temporary
 		rboot_set_temp_rom(2);
-	}
-	else {
+	} else {
 		// we do permanent switch to the other rom
 		slot = rboot_get_current_rom();
-		rboot_set_current_rom(slot ? 0: 1);
+		debugf("Current Slot: %d, New Slot: %d", slot, (slot ? 0 : 1));
+		bool success = rboot_set_current_rom(slot ? 0 : 1);
+		if(!success) {
+			debugf("ROM Change failed!");
+		}
 	}
 	System.restart();
 }
@@ -132,10 +140,10 @@ void cmdRomSwitch(char command, char* params) {
 void cmdCrash(char command, char* params)
 {
 	if(params[0] == '1') { // crash the device
-		Vector<int> *v;
+		Vector<int>* v;
 
 		if(v->contains(1)) { // << the crash should happen here...
-			debugf("?!"); // << that code should never be called!
+			debugf("?!");	// << that code should never be called!
 		}
 	}
 
@@ -154,8 +162,9 @@ void cmdCrash(char command, char* params)
 		debugf("Reason for last exception: %d", data.rom[slot].reason.reason);
 		uint32_t* values = (uint32_t*)&(data.rom[slot].sf);
 		int offset = 0;
-		for (int i = 0; i < CRASH_MAX_STACK_FRAME_LINES ; i++) {
-			debugf("%08x:  %08x %08x %08x %08x", values[offset], values[offset + 1], values[offset + 2], values[offset + 3], values[offset + 4]);
+		for(int i = 0; i < CRASH_MAX_STACK_FRAME_LINES; i++) {
+			debugf("%08x:  %08x %08x %08x %08x", values[offset], values[offset + 1], values[offset + 2],
+				   values[offset + 3], values[offset + 4]);
 			offset += 5;
 		}
 	}
@@ -163,6 +172,3 @@ void cmdCrash(char command, char* params)
 }
 
 #endif /* TEST_MODE */
-
-#endif /* __APP_COMMANDS_TESTMODE_H__ */
-

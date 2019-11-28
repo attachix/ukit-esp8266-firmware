@@ -2,4 +2,3 @@ node_modules
 **/*.o
 out/
 npm-debug.log
-firmware

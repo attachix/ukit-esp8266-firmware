@@ -18,21 +18,28 @@
 // along with U:Kit ESP8266 Firmware.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+/*
+ * cli.cpp
+ *
+ *  Created on: Feb 11, 2016
+ *      Author: slavey
+ */
 #include "cli.h"
 
-void Cli::init() {
+void Cli::init()
+{
 	consoleCommands = new HashMap<char, CommandDefinition>;
-	Serial.setCallback(
-			StreamDataReceivedDelegate(&Cli::commandProcessor, this));
+	Serial.onDataReceived(StreamDataReceivedDelegate(&Cli::commandProcessor, this));
 }
 
-bool Cli::addCommand(char code, int size, consoleFuncDelegate func, uint8_t type/* =CLI_CMD_SIMPLE*/) {
-	if (consoleCommands->contains(code)) {
+bool Cli::addCommand(char code, int size, consoleFuncDelegate func, uint8_t type /* =CLI_CMD_SIMPLE*/)
+{
+	if(consoleCommands->contains(code)) {
 		debug_w("Command is already registered");
 		return false;
 	}
 
-	debug_d("Registering Command: %x, Size: %d, Type: %d", code, size, type);
+	//	debug_d("Registering Command: %x, Size: %d, Type: %d", code, size, type);
 
 	(*consoleCommands)[code].size = size;
 	(*consoleCommands)[code].cmd = func;
@@ -41,8 +48,9 @@ bool Cli::addCommand(char code, int size, consoleFuncDelegate func, uint8_t type
 	return true;
 }
 
-bool Cli::removeCommand(char code) {
-	if (consoleCommands->contains(code)) {
+bool Cli::removeCommand(char code)
+{
+	if(consoleCommands->contains(code)) {
 		consoleCommands->remove(code);
 		return true;
 	}
@@ -50,10 +58,11 @@ bool Cli::removeCommand(char code) {
 	return false;
 }
 
-void Cli::setFlag(uint8_t flag) {
+void Cli::setFlag(uint8_t flag)
+{
 	this->flag |= flag;
 
-	for(int i=0; i < pendingCommands.count(); i++) {
+	for(unsigned i = 0; i < pendingCommands.count(); i++) {
 		uint8_t type = pendingCommands.keyAt(i);
 		if(!bitsSet(this->flag, type)) {
 			continue;
@@ -66,32 +75,32 @@ void Cli::setFlag(uint8_t flag) {
 	}
 }
 
-void Cli::unsetFlag(uint8_t flag) {
+void Cli::unsetFlag(uint8_t flag)
+{
 	this->flag &= ~flag;
 }
 
-void Cli::commandProcessor(Stream& stream, char arrivedChar, unsigned short availableCharsCount) {
+void Cli::commandProcessor(Stream& stream, char arrivedChar, unsigned short availableCharsCount)
+{
 	debug_d("Command: %x, Arrived Char: %x, Chars: %d", currentCommand, arrivedChar, availableCharsCount);
 
-	if (!currentCommand) {
+	if(!currentCommand) {
 		currentCommand = stream.read();
 		availableCharsCount--;
-		if (!consoleCommands->contains(currentCommand)) {
+		if(!consoleCommands->contains(currentCommand)) {
 			debug_e("Invalid command: 0x%x. Skipping", currentCommand);
 			currentCommand = 0;
 			return;
 		}
 	}
 
-	debug_d("Current Command: 0x%x, Expected Size: %d, Available size: %d",
-			currentCommand,
-			(*consoleCommands)[currentCommand].size,
-			availableCharsCount);
+	debug_d("Current Command: 0x%x, Expected Size: %d, Available size: %d", currentCommand,
+			(*consoleCommands)[currentCommand].size, availableCharsCount);
 
 	int expectedSize = (*consoleCommands)[currentCommand].size;
-	if ( availableCharsCount >= expectedSize) {
+	if(availableCharsCount >= expectedSize) {
 		char params[expectedSize];
-		for (int i = 0; i < expectedSize; i++) {
+		for(int i = 0; i < expectedSize; i++) {
 			params[i] = stream.read();
 		}
 
@@ -100,7 +109,7 @@ void Cli::commandProcessor(Stream& stream, char arrivedChar, unsigned short avai
 			debugf("Queuing command:  0x%x", currentCommand);
 
 			pendingCommands[type].write(currentCommand);
-			pendingCommands[type].write((uint8_t *)params, expectedSize);
+			pendingCommands[type].write((uint8_t*)params, expectedSize);
 
 			return;
 		}
